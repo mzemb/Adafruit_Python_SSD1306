@@ -1,100 +1,39 @@
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-import time
-
-import Adafruit_GPIO.SPI as SPI
+import time, subprocess, atexit
 import Adafruit_SSD1306
+from PIL import Image,ImageDraw,ImageFont
 
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
+def init():
+    jolly = Image.open('jollyRoger.ppm').convert('1')
 
-import subprocess, atexit
+    # 128x32 display with hardware I2C:
+    disp = Adafruit_SSD1306.SSD1306_128_32(rst=None)
+    disp.begin()
+    cls(disp)
+    #atexit.register(cls)
 
-# pip install multiping
-# from https://github.com/romana/multi-ping/
-import multiping
+    # Create blank image for drawing.
+    # Make sure to create image with mode '1' for 1-bit color.
+    image = Image.new('1', (disp.width, disp.height))
 
-# Raspberry Pi pin configuration:
-RST = None     # on the PiOLED this pin isnt used
+    # Get drawing object to draw on image.
+    draw = ImageDraw.Draw(image)
 
-# 128x32 display with hardware I2C:
-disp = Adafruit_SSD1306.SSD1306_128_32(rst=RST)
+    drawBlackFilledBox(draw, disp)
 
-# Initialize library.
-disp.begin()
+    font = ImageFont.load_default()
 
-def cls():
+    return (disp,draw,font,image)
+
+def cls(disp):
     disp.clear()
     disp.display()
-atexit.register(cls)
 
-cls()
-
-# Create blank image for drawing.
-# Make sure to create image with mode '1' for 1-bit color.
-width = disp.width
-height = disp.height
-image = Image.new('1', (width, height))
-
-# Get drawing object to draw on image.
-draw = ImageDraw.Draw(image)
-
-def drawBlackFilledBox():
-    draw.rectangle((0,0,width,height), outline=0, fill=0)
-drawBlackFilledBox()
-
-# Draw some shapes.
-# First define some constants to allow easy resizing of shapes.
-padding = -2
-top = padding
-bottom = height-padding
-# Move left to right keeping track of the current x position for drawing shapes.
-x = 0
-
-# Load default font.
-font = ImageFont.load_default()
-
-# Alternatively load a TTF font.  Make sure the .ttf font file is in the same directory as the python script!
-# Some other nice fonts to try: http://www.dafont.com/bitmap.php
-# font = ImageFont.truetype('Minecraftia.ttf', 8)
-
-def getSystemInfo():
-    # Shell scripts for system monitoring from here : https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-    cmd = "hostname -I | cut -d\' \' -f1"
-    IP = subprocess.check_output(cmd, shell = True )
-    cmd = "top -bn1 | grep load | awk '{printf \"CPU Load: %.2f\", $(NF-2)}'"
-    CPU = subprocess.check_output(cmd, shell = True )
-    cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB %.2f%%\", $3,$2,$3*100/$2 }'"
-    MemUsage = subprocess.check_output(cmd, shell = True )
-    cmd = "df -h | awk '$NF==\"/\"{printf \"Disk: %d/%dGB %s\", $3,$2,$5}'"
-    Disk = subprocess.check_output(cmd, shell = True )
-    return {"disk":Disk, "mem":MemUsage, "cpu":CPU, "ip":IP}
-
-#def displaySystemInfo():
-#    draw.text((x, top),       "IP: " + str(IP),  font=font, fill=255)
-#    draw.text((x, top+8),     str(CPU), font=font, fill=255)
-#    draw.text((x, top+16),    str(MemUsage),  font=font, fill=255)
-#    draw.text((x, top+25),    str(Disk),  font=font, fill=255)
+def drawBlackFilledBox(draw, disp):
+    draw.rectangle((0, 0, disp.width, disp.height), outline=0, fill=0)
 
 def addLine(text):
     global cur
-    draw.text((x, cur), text,  font=font, fill=255)
+    draw.text((0, cur), text,  font=font, fill=255)
     cur = cur + 8
 
 def render():
@@ -104,30 +43,47 @@ def render():
     disp.display()
 
 def ping(hostname):
-    return subprocess.Popen(["/bin/ping", "-c1", "-w100", hostname], stdout=subprocess.PIPE).stdout.read()
+    return subprocess.Popen(["/bin/ping", "-c 10", "-D", "-i 0.3", "-q", hostname], stdout=subprocess.PIPE).stdout.read()
+
+def getLastPings():
+    subprocess.checkoutput("/home/pi/tmp/upmonitor.log")
+
+def runCmd(cmd):
+    return subprocess.check_output(cmd, shell=True)
+
+def displayJollyRoger():
+    disp.image(jolly)
+    disp.display()
+    time.sleep(1)
 
 if __name__ == "__main__":
 
     cur = 0
-    addLine("hi")
-    render()
-    time.sleep(.1)
+    disp,draw,font,image = init()
 
     while True:
     
-        drawBlackFilledBox()
+        drawBlackFilledBox(draw, disp)
 
-        mp = multiping.MultiPing(["192.168.0.1"])
-        mp.send()
-        responses, no_responses = mp.receive(1)
+        lastLines = runCmd("tail -2 /home/pi/tmp/upmonitor.log")
 
-        #from pprint import pprint
-        #pprint(responses)
+        pings = []
+        for line in lastLines.split('\n'):
+            if len(line) > 0:
+                t = line.split()[0]
+                pings.append(t)
+        print pings
 
-        for addr, rtt in responses.items():
-            text = "%s: %f ms" % (addr, rtt*1000)
+        if all(p == 0 for p in pings):
+            displayJollyRoger()
+        elif 0 in pings:
+            addLine("WARNING: one ping failed")
+        else:
+            print pings
+            curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
+            ms = float(pings[-1])
+            text = "%s %.1f ms" % (curTime, ms)
             addLine(text)
-            #print text
-            
+
         render()
-        time.sleep(3)
+        time.sleep(1)
