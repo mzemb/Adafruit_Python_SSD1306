@@ -51,18 +51,26 @@ def runCmd(cmd):
         out = ""
     return out
 
-def ping(hostname):
-    cmd = "/bin/ping -D -w 3 -c 10 -i 0.3 -q %s" % hostname
-    out = runCmd(cmd)
-    loss = "100%"
-    avgMs = "-"
-    for line in out.split('\n'):
-        if line.find("packet loss") != -1:
-            loss = line.split(",")[-2].strip().split()[0]
-            loss = int(float(loss.replace("%","")) * 100)
-        if line.find("rtt") != -1:
-            avgMs = int(ceil(float(line.split('/')[-3])))
-    return {"loss":loss,"ms":avgMs}
+def ping(hostnames):
+    processes = []
+    results = {}
+    for hostname in hostnames:
+        cmd = "/bin/ping -D -w 3 -c 10 -i 0.3 -q %s" % hostname
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=True)
+        processes.append((hostname,process))
+
+    for hostname,process in processes:
+        process.wait()
+        loss = "100%"
+        avgMs = "-"
+        for line in process.stdout:
+            if line.find("packet loss") != -1:
+                loss = line.split(",")[-2].strip().split()[0]
+                loss = int(float(loss.replace("%","")) * 100)
+            if line.find("rtt") != -1:
+                avgMs = int(ceil(float(line.split('/')[-3])))
+        results[hostname] = {"loss":loss,"ms":avgMs}
+    return results
 
 def displayImg(jolly):
     disp.image(jolly)
@@ -78,21 +86,30 @@ if __name__ == "__main__":
     
         drawBlackFilledBox(draw, disp)
 
-        hosts = [
-            {"name":"modem", "ip":"192.168.0.1"}
-        ,   {"name":"dnsred", "ip":"89.2.0.1"}
-        ,   {"name":"google", "ip":"8.8.8.8"}
-        ]
+        hosts = {
+            "192.168.0.1":"modem"
+        ,   "89.2.0.1":   "dnsred"
+        ,   "8.8.8.8":    "google"
+        }
 
-        results = {}
-        for host in hosts:
-            result = ping(host["ip"])
-            text = "%6s: %4s ms" % (host["name"][0:6], result["ms"])
+        results = ping(hosts.keys())
+
+        from pprint import pprint
+        pprint(results)
+
+        for hostname in results.keys():
+            result = results[hostname]
+            alias = hosts[hostname]
+            text = "%6s: " % (alias[0:6])
             if result["loss"] > 0:
                 text += (" %s LOSS" % result["loss"])
+            else:
+                text += (" %4s ms" % result["ms"])
             print text
             addLine(text)
-            results[host["name"]] = result
+            results[alias] = result
+
+        pprint(results)
 
         if results["modem"]["loss"] > 10:
             displayImg(jolly)
