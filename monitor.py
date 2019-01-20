@@ -21,7 +21,10 @@ def init():
 
     drawBlackFilledBox(draw, disp)
 
-    font = ImageFont.load_default()
+    try:
+        font = ImageFont.truetype("start.ttf", 8, encoding="unic")
+    except:
+        font = ImageFont.load_default()
 
     return (disp,draw,font,image,jolly)
 
@@ -94,9 +97,6 @@ if __name__ == "__main__":
 
         results = ping(hosts.keys())
 
-        from pprint import pprint
-        pprint(results)
-
         for hostname in results.keys():
             result = results[hostname]
             alias = hosts[hostname]
@@ -105,11 +105,8 @@ if __name__ == "__main__":
                 text += (" %s LOSS" % result["loss"])
             else:
                 text += (" %4s ms" % result["ms"])
-            print text
             addLine(text)
             results[alias] = result
-
-        pprint(results)
 
         if results["modem"]["loss"] > 10:
             displayImg(jolly)
