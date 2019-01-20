@@ -1,6 +1,7 @@
 import time, subprocess, atexit
 import Adafruit_SSD1306
 from PIL import Image,ImageDraw,ImageFont
+from math import ceil
 
 def init():
     jolly = Image.open('jollyRoger.ppm').convert('1')
@@ -22,7 +23,7 @@ def init():
 
     font = ImageFont.load_default()
 
-    return (disp,draw,font,image)
+    return (disp,draw,font,image,jolly)
 
 def cls(disp):
     disp.clear()
@@ -36,22 +37,34 @@ def addLine(text):
     draw.text((0, cur), text,  font=font, fill=255)
     cur = cur + 8
 
-def render():
+def render(disp):
     global cur
     cur = 0
     disp.image(image)
     disp.display()
 
-def ping(hostname):
-    return subprocess.Popen(["/bin/ping", "-c 10", "-D", "-i 0.3", "-q", hostname], stdout=subprocess.PIPE).stdout.read()
-
-def getLastPings():
-    subprocess.checkoutput("/home/pi/tmp/upmonitor.log")
-
 def runCmd(cmd):
-    return subprocess.check_output(cmd, shell=True)
+    try:
+        out = subprocess.check_output(cmd, shell=True)
+    except:
+        pass
+        out = ""
+    return out
 
-def displayJollyRoger():
+def ping(hostname):
+    cmd = "/bin/ping -D -w 3 -c 10 -i 0.3 -q %s" % hostname
+    out = runCmd(cmd)
+    loss = "100%"
+    avgMs = "-"
+    for line in out.split('\n'):
+        if line.find("packet loss") != -1:
+            loss = line.split(",")[-2].strip().split()[0]
+            loss = int(float(loss.replace("%","")) * 100)
+        if line.find("rtt") != -1:
+            avgMs = int(ceil(float(line.split('/')[-3])))
+    return {"loss":loss,"ms":avgMs}
+
+def displayImg(jolly):
     disp.image(jolly)
     disp.display()
     time.sleep(1)
@@ -59,31 +72,34 @@ def displayJollyRoger():
 if __name__ == "__main__":
 
     cur = 0
-    disp,draw,font,image = init()
+    disp,draw,font,image,jolly = init()
 
     while True:
     
         drawBlackFilledBox(draw, disp)
 
-        lastLines = runCmd("tail -2 /home/pi/tmp/upmonitor.log")
+        hosts = [
+            {"name":"modem", "ip":"192.168.0.1"}
+        ,   {"name":"dnsred", "ip":"89.2.0.1"}
+        ,   {"name":"google", "ip":"8.8.8.8"}
+        ]
 
-        pings = []
-        for line in lastLines.split('\n'):
-            if len(line) > 0:
-                t = line.split()[0]
-                pings.append(t)
-        print pings
-
-        if all(p == 0 for p in pings):
-            displayJollyRoger()
-        elif 0 in pings:
-            addLine("WARNING: one ping failed")
-        else:
-            print pings
-            curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
-            ms = float(pings[-1])
-            text = "%s %.1f ms" % (curTime, ms)
+        results = {}
+        for host in hosts:
+            result = ping(host["ip"])
+            text = "%6s: %4s ms" % (host["name"][0:6], result["ms"])
+            if result["loss"] > 0:
+                text += (" %s LOSS" % result["loss"])
+            print text
             addLine(text)
+            results[host["name"]] = result
 
-        render()
+        if results["modem"]["loss"] > 10:
+            displayImg(jolly)
+
+        #curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
+        #addLine(curTime)
+
+        render(disp)
         time.sleep(1)
+
