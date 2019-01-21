@@ -2,15 +2,42 @@ import time, subprocess, atexit
 import Adafruit_SSD1306
 from PIL import Image,ImageDraw,ImageFont
 from math import ceil
+import RPi.GPIO as GPIO
+
+#TODO: speedtest during the night
+#TODO: bip when dead ?
+
+class S1306(object):
+    def __init__(self):
+        self.buttons = {
+            "L":27 
+        ,   "R":23 
+        ,   "C":4 
+        ,   "U":17 
+        ,   "D":22 
+        ,   "A":5 
+        ,   "B":6 
+        }
+
+def initGpio():
+    GPIO.setmode(GPIO.BCM)
+    s1306 = S1306()
+    for button in s1306.buttons.keys():
+        pin = s1306.buttons[button]
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(pin, GPIO.RISING, callback=buttonCb, bouncetime=200)
 
 def init():
-    jolly = Image.open('jollyRoger.ppm').convert('1')
+
+    initGpio()
+
+    jolly = Image.open('/home/pi/Adafruit_Python_SSD1306/jollyRoger.ppm').convert('1')
 
     # 128x32 display with hardware I2C:
-    disp = Adafruit_SSD1306.SSD1306_128_32(rst=None)
+    disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
     disp.begin()
     cls(disp)
-    #atexit.register(cls)
+    atexit.register(cls,disp)
 
     # Create blank image for drawing.
     # Make sure to create image with mode '1' for 1-bit color.
@@ -22,7 +49,7 @@ def init():
     drawBlackFilledBox(draw, disp)
 
     try:
-        font = ImageFont.truetype("start.ttf", 8, encoding="unic")
+        font = ImageFont.truetype("/home/pi/Adafruit_Python_SSD1306/start.ttf", 8, encoding="unic")
     except:
         font = ImageFont.load_default()
 
@@ -80,40 +107,53 @@ def displayImg(jolly):
     disp.display()
     time.sleep(1)
 
+def buttonCb(channel):
+    global hide
+    #print('Edge detected on channel %s' % channel)
+    hide = not hide
+    if hide:
+        addLine("hiding")
+
 if __name__ == "__main__":
 
     cur = 0
+    hide = False
     disp,draw,font,image,jolly = init()
 
     while True:
-    
-        drawBlackFilledBox(draw, disp)
+   
+        if hide:
+            cls(disp)
 
-        hosts = {
-            "192.168.0.1":"modem"
-        ,   "89.2.0.1":   "dnsred"
-        ,   "8.8.8.8":    "google"
-        }
+        else:
+            drawBlackFilledBox(draw, disp)
 
-        results = ping(hosts.keys())
+            hosts = {
+                "192.168.0.1":"modem"
+            ,   "89.2.0.1":   "dnsred"
+            ,   "8.8.8.8":    "google"
+            }
 
-        for hostname in results.keys():
-            result = results[hostname]
-            alias = hosts[hostname]
-            text = "%6s: " % (alias[0:6])
-            if result["loss"] > 0:
-                text += (" %s LOSS" % result["loss"])
-            else:
-                text += (" %4s ms" % result["ms"])
-            addLine(text)
-            results[alias] = result
+            results = ping(hosts.keys())
 
-        if results["modem"]["loss"] > 10:
-            displayImg(jolly)
+            for hostname in results.keys():
+                result = results[hostname]
+                alias = hosts[hostname]
+                text = "%6s: " % (alias[0:6])
+                if result["loss"] > 0:
+                    text += (" %s LOSS" % result["loss"])
+                else:
+                    text += (" %4s ms" % result["ms"])
+                addLine(text)
+                results[alias] = result
 
-        #curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
-        #addLine(curTime)
+            if results["modem"]["loss"] > 10:
+                displayImg(jolly)
 
-        render(disp)
+            #curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
+            #addLine(curTime)
+
+            render(disp)
+
         time.sleep(1)
 
