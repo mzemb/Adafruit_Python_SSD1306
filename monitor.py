@@ -148,11 +148,6 @@ if __name__ == "__main__":
                 addLine(text)
                 results[alias] = result
 
-            #addLine("extra1")
-            #addLine("extra2")
-            #addLine("extra3")
-            #addLine("extra4")
-
             if results["modem"]["loss"] > 10:
                 displayImg(jolly)
 
