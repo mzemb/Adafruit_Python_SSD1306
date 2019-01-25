@@ -65,7 +65,7 @@ def drawBlackFilledBox(draw, disp):
 def addLine(text):
     global cur
     draw.text((0, cur), text,  font=font, fill=255)
-    cur = cur + 8
+    cur = cur + 8 + 1 # +1 for spacing between lines
 
 def render(disp):
     global cur
@@ -139,13 +139,19 @@ if __name__ == "__main__":
             for hostname in results.keys():
                 result = results[hostname]
                 alias = hosts[hostname]
-                text = "%6s: " % (alias[0:6])
-                if result["loss"] > 0:
-                    text += (" %s LOSS" % result["loss"])
-                else:
-                    text += (" %4s ms" % result["ms"])
+                try:
+                    work = 100 - int(result["loss"])
+                except:
+                    work = 0
+                ms = min(result["ms"],999)
+                text = "%6s:%3sms %s" % (alias[0:6], ms, work)
                 addLine(text)
                 results[alias] = result
+
+            #addLine("extra1")
+            #addLine("extra2")
+            #addLine("extra3")
+            #addLine("extra4")
 
             if results["modem"]["loss"] > 10:
                 displayImg(jolly)
