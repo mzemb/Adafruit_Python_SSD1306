@@ -119,10 +119,7 @@ def buttonCb(channel):
         lossTime = 0
     else:
         hide = not hide
-        if hide:
-            addLine("hiding")
-        else:
-            addLine("showing")
+        renderLines(disp)
 
 def getCurTime():
     return time.time()
@@ -143,7 +140,6 @@ if __name__ == "__main__":
     cur = 0
     hide = False
     disp,draw,font,image,jolly = init()
-    addLine("starting")
 
     while True:
     
@@ -154,9 +150,10 @@ if __name__ == "__main__":
             time.sleep(1)
 
         else:
-            curTime = getCurTime()
-
             drawBlackFilledBox(draw, disp)
+
+            curTime = getCurTime()
+            addLine("  %s" % timeToString(curTime))
 
             results = ping(hosts.keys())
 
@@ -164,7 +161,7 @@ if __name__ == "__main__":
                 result = results[hostname]
                 alias = hosts[hostname]
                 try:
-                    print "host:%s loss:%s" % (alias,result["loss"])
+                    #print "host:%s loss:%s" % (alias,result["loss"])
                     work = 100 - int(result["loss"])
                 except:
                     work = 0
