@@ -110,12 +110,19 @@ def ping(hostnames):
 
 def buttonCb(channel):
     global hide
+    global lossText
+    global lossTime
     #print('Edge detected on channel %s' % channel)
-    hide = not hide
-    if hide:
-        addLine("hiding")
+    s1306 = S1306()
+    if channel in [s1306.buttons["A"], s1306.buttons["B"]]:
+        lossText = ""
+        lossTime = 0
     else:
-        addLine("showing")
+        hide = not hide
+        if hide:
+            addLine("hiding")
+        else:
+            addLine("showing")
 
 def getCurTime():
     return time.time()
@@ -171,7 +178,6 @@ if __name__ == "__main__":
                     lossTime = curTime
 
             addLine("")
-            print lossText
             addLine(lossText)
 
             if loss:
