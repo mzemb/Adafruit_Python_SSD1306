@@ -67,11 +67,17 @@ def addLine(text):
     draw.text((0, cur), text,  font=font, fill=255)
     cur = cur + 8 + 1 # +1 for spacing between lines
 
-def render(disp):
+def renderLines(disp):
     global cur
     cur = 0
     disp.image(image)
     disp.display()
+    time.sleep(1)
+
+def renderImg(jolly):
+    disp.image(jolly)
+    disp.display()
+    time.sleep(0.3)
 
 def runCmd(cmd):
     try:
@@ -96,16 +102,11 @@ def ping(hostnames):
         for line in process.stdout:
             if line.find("packet loss") != -1:
                 loss = line.split(",")[-2].strip().split()[0]
-                loss = int(float(loss.replace("%","")) * 100)
+                loss = int(float(loss.replace("%","")))
             if line.find("rtt") != -1:
                 avgMs = int(ceil(float(line.split('/')[-3])))
         results[hostname] = {"loss":loss,"ms":avgMs}
     return results
-
-def displayImg(jolly):
-    disp.image(jolly)
-    disp.display()
-    time.sleep(1)
 
 def buttonCb(channel):
     global hide
@@ -113,26 +114,42 @@ def buttonCb(channel):
     hide = not hide
     if hide:
         addLine("hiding")
+    else:
+        addLine("showing")
+
+def getCurTime():
+    return time.time()
+
+def timeToString(t):
+    return time.strftime("%d %b %Hh%M", time.localtime(t))
 
 if __name__ == "__main__":
 
+    hosts = {
+        "192.168.0.1":"modem"
+    ,   "89.2.0.1":   "dnsred"
+    ,   "8.8.8.8":    "google"
+    #,   "1.2.3.4":    "dummy"
+    }
+    lossText = ""
+    lossTime = 0
     cur = 0
     hide = False
     disp,draw,font,image,jolly = init()
+    addLine("starting")
 
     while True:
+    
+        loss = False
    
         if hide:
             cls(disp)
+            time.sleep(1)
 
         else:
-            drawBlackFilledBox(draw, disp)
+            curTime = getCurTime()
 
-            hosts = {
-                "192.168.0.1":"modem"
-            ,   "89.2.0.1":   "dnsred"
-            ,   "8.8.8.8":    "google"
-            }
+            drawBlackFilledBox(draw, disp)
 
             results = ping(hosts.keys())
 
@@ -140,6 +157,7 @@ if __name__ == "__main__":
                 result = results[hostname]
                 alias = hosts[hostname]
                 try:
+                    print "host:%s loss:%s" % (alias,result["loss"])
                     work = 100 - int(result["loss"])
                 except:
                     work = 0
@@ -147,14 +165,16 @@ if __name__ == "__main__":
                 text = "%6s:%3sms %s" % (alias[0:6], ms, work)
                 addLine(text)
                 results[alias] = result
+                if work != 100 and curTime > lossTime:
+                    lossText = "err %s %s \non %s" % (alias, work, timeToString(curTime))
+                    loss = True
+                    lossTime = curTime
 
-            if results["modem"]["loss"] > 10:
-                displayImg(jolly)
+            addLine("")
+            print lossText
+            addLine(lossText)
 
-            #curTime = time.strftime("%H:%M:%S", time.localtime(time.time()))
-            #addLine(curTime)
-
-            render(disp)
-
-        time.sleep(1)
+            if loss:
+                renderImg(jolly)
+            renderLines(disp)
 
