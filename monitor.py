@@ -4,6 +4,9 @@ from PIL import Image,ImageDraw,ImageFont
 from math import ceil
 import RPi.GPIO as GPIO
 
+# crontab: @reboot sleep 30 && /usr/bin/python /home/pi/Adafruit_Python_SSD1306/monitor.py 2>&1 >> /home/pi/tmp/monitor.log
+
+#TODO: log results
 #TODO: speedtest during the night
 #TODO: bip when dead ?
 
@@ -20,12 +23,15 @@ class S1306(object):
         }
 
 def initGpio():
+    global hide
     GPIO.setmode(GPIO.BCM)
     s1306 = S1306()
     for button in s1306.buttons.keys():
         pin = s1306.buttons[button]
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(pin, GPIO.RISING, callback=buttonCb, bouncetime=200)
+    time.sleep(.3)
+    hide = False
 
 def init():
 
@@ -112,7 +118,7 @@ def buttonCb(channel):
     global hide
     global lossText
     global lossTime
-    #print('Edge detected on channel %s' % channel)
+    print('debug: edge on channel %s at %s' % (channel, time.strftime("%H:%M:%S", time.localtime())))
     s1306 = S1306()
     if channel in [s1306.buttons["A"], s1306.buttons["B"]]:
         lossText = ""
@@ -139,12 +145,16 @@ if __name__ == "__main__":
     lossTime = 0
     cur = 0
     hide = False
+
+    print "start at %s (hide=%s)" % (time.strftime("%H:%M:%S", time.localtime()), hide)
+
     disp,draw,font,image,jolly = init()
 
     while True:
     
         loss = False
-   
+  
+
         if hide:
             cls(disp)
             time.sleep(1)
