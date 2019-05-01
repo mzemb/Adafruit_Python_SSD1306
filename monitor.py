@@ -8,7 +8,6 @@ import RPi.GPIO as GPIO
 
 #TODO: log results
 #TODO: speedtest during the night
-#TODO: bip when dead ?
 
 class S1306(object):
     def __init__(self):
@@ -61,17 +60,21 @@ def init():
 
     return (disp,draw,font,image,jolly)
 
+
 def cls(disp):
     disp.clear()
     disp.display()
 
+
 def drawBlackFilledBox(draw, disp):
     draw.rectangle((0, 0, disp.width, disp.height), outline=0, fill=0)
+
 
 def addLine(text):
     global cur
     draw.text((0, cur), text,  font=font, fill=255)
     cur = cur + 8 + 1 # +1 for spacing between lines
+
 
 def renderLines(disp):
     global cur
@@ -80,10 +83,12 @@ def renderLines(disp):
     disp.display()
     time.sleep(1)
 
+
 def renderImg(jolly):
     disp.image(jolly)
     disp.display()
     time.sleep(0.3)
+
 
 def runCmd(cmd):
     try:
@@ -92,6 +97,7 @@ def runCmd(cmd):
         pass
         out = ""
     return out
+
 
 def ping(hostnames):
     processes = []
@@ -114,26 +120,119 @@ def ping(hostnames):
         results[hostname] = {"loss":loss,"ms":avgMs}
     return results
 
+
 def buttonCb(channel):
     global hide
     global lossText
     global lossTime
+    global mode
     print('debug: edge on channel %s at %s' % (channel, time.strftime("%H:%M:%S", time.localtime())))
     s1306 = S1306()
+    cls(disp)
     if channel in [s1306.buttons["A"], s1306.buttons["B"]]:
         lossText = ""
         lossTime = 0
+    elif channel == s1306.buttons["R"]:
+        mode = MODES[0]
+    elif channel == s1306.buttons["L"]:
+        mode = MODES[1]
     else:
         hide = not hide
         renderLines(disp)
 
+
 def getCurTime():
     return time.time()
+
 
 def timeToString(t):
     return time.strftime("%d %b %Hh%M", time.localtime(t))
 
+
+def renderPing():
+    global hide
+    loss = False
+    lossText = ""
+    lossTime = 0
+
+    curTime = getCurTime()
+    addLine("  %s" % timeToString(curTime))
+    
+    results = ping(hosts.keys())
+    
+    for hostname in results.keys():
+        result = results[hostname]
+        alias = hosts[hostname]
+        try:
+            #print "host:%s loss:%s" % (alias,result["loss"])
+            work = 100 - int(result["loss"])
+        except:
+            work = 0
+        ms = min(result["ms"],999)
+        text = "%6s:%3sms %s" % (alias[0:6], ms, work)
+        addLine(text)
+        results[alias] = result
+        if work < 80 and curTime > lossTime:
+            lossText = "err %s %s \non %s" % (alias, work, timeToString(curTime))
+            loss = True
+            lossTime = curTime
+    
+    addLine("")
+    addLine(lossText)
+    
+    if loss:
+        renderImg(jolly)
+    renderLines(disp)
+
+
+def onlyPrintable(string):
+    return ''.join(s for s in string if ord(s)>31 and ord(s)<126)
+
+
+def contains(string,x):
+    return string.find(x) != -1
+
+
+def getVpnClients():
+
+    cmd = "/usr/local/bin/pivpn clients"
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=True)
+    process.wait()
+
+    prelude = True
+    clients = []
+    for line in process.stdout:
+        if len(line.strip()) > 0:
+            text = onlyPrintable(line)
+            if not prelude:
+                x = line.split()
+                #print x
+                host = x[0]
+                ip = x[2]
+                clients.append("%s %s" % (host,ip))
+    
+            if contains(text,"Name") and contains(text,"Connected Since"):
+                prelude = False
+
+    return clients
+
+
+def renderVpn():
+    clients = getVpnClients()
+    addLine("%d pivpn clients" % len(clients))
+    addLine("")
+
+    for client in clients:
+        addLine(client)
+    renderLines(disp)
+
+
 if __name__ == "__main__":
+
+    MODES = ["vpn","ping"]
+    mode = MODES[0]
+    hide = False
+    cur = 0
 
     hosts = {
         "192.168.0.1":"modem"
@@ -141,53 +240,22 @@ if __name__ == "__main__":
     ,   "8.8.8.8":    "google"
     #,   "1.2.3.4":    "dummy"
     }
-    lossText = ""
-    lossTime = 0
-    cur = 0
-    hide = False
 
-    print "start at %s (hide=%s)" % (time.strftime("%H:%M:%S", time.localtime()), hide)
+    print "start at %s" % time.strftime("%H:%M:%S", time.localtime())
 
     disp,draw,font,image,jolly = init()
 
     while True:
-    
-        loss = False
-  
-
+ 
         if hide:
             cls(disp)
-            time.sleep(1)
 
         else:
             drawBlackFilledBox(draw, disp)
 
-            curTime = getCurTime()
-            addLine("  %s" % timeToString(curTime))
-
-            results = ping(hosts.keys())
-
-            for hostname in results.keys():
-                result = results[hostname]
-                alias = hosts[hostname]
-                try:
-                    #print "host:%s loss:%s" % (alias,result["loss"])
-                    work = 100 - int(result["loss"])
-                except:
-                    work = 0
-                ms = min(result["ms"],999)
-                text = "%6s:%3sms %s" % (alias[0:6], ms, work)
-                addLine(text)
-                results[alias] = result
-                if work != 100 and curTime > lossTime:
-                    lossText = "err %s %s \non %s" % (alias, work, timeToString(curTime))
-                    loss = True
-                    lossTime = curTime
-
-            addLine("")
-            addLine(lossText)
-
-            if loss:
-                renderImg(jolly)
-            renderLines(disp)
-
+            if mode == "ping":
+                renderPing()
+            if mode == "vpn":
+                renderVpn()
+            
+        time.sleep(10)
