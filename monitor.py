@@ -227,9 +227,43 @@ def renderVpn():
     renderLines(disp)
 
 
+def getIps():
+    cmd = '/sbin/ip addr show | grep -e "[0-9]: " -e "inet "'
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=True)
+    process.wait()
+    ips = []
+    adapterName = None
+    adapterIp = None
+    adapterNames = ""
+    for line in process.stdout:
+        if len(line.strip()) > 0:
+            #print line
+            if contains(line, "inet "):
+                adapterIp = line.split()[1].strip()
+                #print "IP:%s" % line
+                ips.append(adapterIp)
+                #ips.append("%s %s" % (adapterName, adapterIp))
+            else:
+                adapterName = line.split()[1].strip().strip(':')[0:3]
+                #print "NAME:%s" % line
+                #ips.append(adapterName)
+                adapterNames += " " + adapterName
+    print adapterNames
+    ips.insert(0, adapterNames)
+    return ips
+
+
+def renderIp():
+    ips = getIps()
+    for ip in ips:
+        addLine(ip)
+    renderLines(disp)
+
+
+
 if __name__ == "__main__":
 
-    MODES = ["vpn","ping"]
+    MODES = ["ip","vpn","ping"]
     mode = MODES[0]
     hide = False
     cur = 0
@@ -253,6 +287,8 @@ if __name__ == "__main__":
         else:
             drawBlackFilledBox(draw, disp)
 
+            if mode == "ip":
+                renderIp()
             if mode == "ping":
                 renderPing()
             if mode == "vpn":
